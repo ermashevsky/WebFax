@@ -1,0 +1,87 @@
+package ru.sip64.webfax.webserice;
+
+import java.io.File;
+import java.io.IOException;
+
+import javax.ejb.EJB;
+import javax.jws.WebService;
+
+
+import ru.sip64.webfax.asterisk.AsteriskListenerEvent;
+import ru.sip64.webfax.asterisk.AsteriskManagement;
+import ru.sip64.webfax.asterisk.SipManagement;
+import ru.sip64.webfax.bean.AccessForDBPinCodeBeanLocal;
+import ru.sip64.webfax.utils.Constants;
+import ru.sip64.webfax.utils.ReadConfigFile;
+
+
+@WebService(endpointInterface = "ru.sip64.webfax.webserice.WebServiceFax")
+public class WebServiceFaxImp implements WebServiceFax{
+	
+	@EJB
+	AccessForDBPinCodeBeanLocal pinCodeDB = null;
+	
+	@Override
+	public String convertFile(String filepath) {
+		String workFileDir = ReadConfigFile.getCfgReadFile().getProperty("workdir") + File.separator + filepath;
+		if(Constants.commandExec(command) != 0) return "FAIL"
+		return null;
+	}
+	
+	@Override
+	public String openSession(String userName) {
+		SipManagement sipManagement = new SipManagement();
+		String pinCode = pinCodeDB.getPinCode(userName);
+		String pinCodePassword = pinCodeDB.getPinCodePassword(userName);
+		sipManagement.createSipConfig(userName, pinCode, pinCodePassword);
+		boolean register =  sipManagement.sipReload(pinCode, userName);
+		System.out.println(userName);
+		if (register){
+			return "OK";
+		}
+		return "FAIL";
+	}
+	
+	@Override
+	public String sendFax(String userName, String destinationNumber, String fileName) {
+		String pinCode = pinCodeDB.getPinCode(userName);
+		AsteriskManagement asterisk = null;
+		try {
+			asterisk = new AsteriskManagement(destinationNumber, fileName, pinCode);
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		if (asterisk != null) return asterisk.run();
+		return Constants.FAX_NOT_SEND;
+	}
+	
+	@Override
+	public String resultSendFax(String destinationNumber) {
+		String resultFax = AsteriskListenerEvent.getStatusPhone().get(destinationNumber);
+		while(resultFax.equals(Constants.CALL_SUCCESS)){
+			try {
+				Thread.sleep(500);
+				resultFax = AsteriskListenerEvent.getStatusPhone().get(destinationNumber);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		return resultFax;
+	}
+	
+	@Override
+	public String closeSession(String userName) {
+		String pinCode = pinCodeDB.getPinCode(userName);
+		SipManagement sipManagement = new SipManagement();
+		sipManagement.deleteSipConfig(userName);
+		sipManagement.sipReload(pinCode, userName);
+	    return "OK";
+	}
+
+	
+
+}
+
+

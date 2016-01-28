@@ -1,0 +1,44 @@
+package ru.sip64.webfax.webserice;
+
+import javax.jws.WebMethod;
+import javax.jws.WebParam;
+import javax.jws.WebResult;
+import javax.jws.WebService;
+import javax.jws.soap.SOAPBinding;
+
+@WebService()
+@SOAPBinding(style = SOAPBinding.Style.RPC, use = SOAPBinding.Use.LITERAL) 
+public interface WebServiceFax {
+	
+	@WebMethod(operationName="ConvertFile")
+	@WebResult(name="Result")
+	public String convertFile(@WebParam(name="FilePath")String filePath);
+	
+	@WebMethod(operationName="DeleteFile")
+	@WebResult(name="Result")
+	public String deleteFile(@WebParam(name="FilePathDelete")String filePath);
+	
+	@WebMethod(operationName="OpenSession")
+	@WebResult(name="Result")
+	public String openSession(@WebParam(name="Username")String username);
+	
+	@WebMethod(operationName="SendFax")
+	@WebResult(name="Result")
+	public String sendFax(@WebParam(name="Username")String username, 
+			@WebParam(name="DestinationNumber")String destinationNumber,
+			@WebParam(name="FileName")String fileName);
+	
+	@WebMethod(operationName="ResultSendFax")
+	@WebResult(name="Result")
+	public String resultSendFax (@WebParam(name="DestinationNumber")String destinationNumber);
+	
+	@WebMethod(operationName="CloseSession")
+	@WebResult(name="Result")
+	public String closeSession(@WebParam(name="Username")String username);
+	
+	@WebMethod(operationName="CloseSession")
+	@WebResult(name="Result")
+	public String moveFile(@WebParam(name="Username")String username, 
+			@WebParam(name="FileName")String fileName);
+
+}

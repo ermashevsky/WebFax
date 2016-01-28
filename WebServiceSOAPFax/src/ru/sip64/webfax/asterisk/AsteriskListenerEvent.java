@@ -1,0 +1,64 @@
+package ru.sip64.webfax.asterisk;
+
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+
+import org.asteriskjava.manager.ManagerConnection;
+import org.asteriskjava.manager.ManagerEventListener;
+import org.asteriskjava.manager.event.ManagerEvent;
+
+import org.jboss.logging.Logger;
+
+import ru.sip64.webfax.session.ClientSession;
+import ru.sip64.webfax.webserice.WebServiceFaxImp;
+
+
+public class AsteriskListenerEvent extends AsteriskOpenConnect implements ManagerEventListener {
+		private static final Logger log = Logger.getLogger(AsteriskListenerEvent.class.getName());
+		
+	   
+	public AsteriskListenerEvent(){
+		//ManagerConnectionFactory factory = new ManagerConnectionFactory(
+				//ReadConfigFile.getCfgReadFile().getProperty("bind_address"), 
+				//ReadConfigFile.getCfgReadFile().getProperty("username"), 
+				//ReadConfigFile.getCfgReadFile().getProperty("password"));
+		
+		ManagerConnection mn = getManagerConnectionFactory().createManagerConnection();
+		loginAsterisk(mn);
+		mn.addEventListener(this);
+	}
+	
+	@Override
+	public void onManagerEvent(ManagerEvent event) {
+			try {
+				Method m = event.getClass().getMethod("getChannel");
+				String calledNumber = numberPhone((String)m.invoke(event));
+				if (calledNumber == null)
+					return;
+				SendFax sf = WebServiceFaxImp.getUsersMap().get(ClientSession.getNumberPhomeToUsername(calledNumber)).getSf();
+				if(sf != null){
+					sf.getHandlerEvent().setEvent(event);
+				}
+				else{
+					log.error(calledNumber + " NOT MUST BE!");
+				}
+			} catch (NoSuchMethodException e) {
+			} catch (IllegalAccessException e) {	
+			} catch(InvocationTargetException e){}
+			
+
+	}
+	
+	private String numberPhone(String channel){
+		Pattern p = Pattern.compile(".*/([0-9]+)[-/].*");
+		Matcher m = p.matcher(channel);
+		while(m.find())
+			return m.group(1);
+		return null;
+	}
+
+}

@@ -1,0 +1,6 @@
+INDEX VERSION 1.122+F:\Work\Java\Work_Project\WebServiceFax\.metadata\.plugins\org.eclipse.wst.jsdt.core\indexes
+3430668335.index
+620237191.index
+3190820020.index
+3624337585.index
+2116871576.index

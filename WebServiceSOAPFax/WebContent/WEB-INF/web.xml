@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://java.sun.com/xml/ns/javaee" xmlns:web="http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd" version="3.0">
+  <display-name>WebServiceSOAPFax</display-name>
+  <listener>
+    <listener-class>ru.sip64.webfax.asterisk.AsteriskListenerEvent</listener-class>
+  </listener>
+  <servlet>
+    <display-name>start</display-name>
+    <servlet-name>start</servlet-name>
+    <servlet-class>ru.sip64.webfax.webserice.WebServiceFaxImp</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>start</servlet-name>
+    <url-pattern>/start</url-pattern>
+  </servlet-mapping>
+  <session-config>
+    <session-timeout>15</session-timeout>
+  </session-config>
+</web-app>

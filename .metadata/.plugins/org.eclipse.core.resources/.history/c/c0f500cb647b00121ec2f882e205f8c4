@@ -1,0 +1,195 @@
+package ru.sip64.webfax.webserice;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.io.Writer;
+
+import javax.ejb.EJB;
+import javax.jws.WebService;
+
+import org.jboss.logging.Logger;
+
+
+import ru.sip64.webfax.asterisk.AsteriskListenerEvent;
+import ru.sip64.webfax.asterisk.AsteriskManagement;
+import ru.sip64.webfax.asterisk.SipManagement;
+import ru.sip64.webfax.bean.AccessForDBPinCodeBeanLocal;
+import ru.sip64.webfax.utils.Constants;
+import ru.sip64.webfax.utils.ReadConfigFile;
+
+
+@WebService(endpointInterface = "ru.sip64.webfax.webserice.WebServiceFax")
+public class WebServiceFaxImp implements WebServiceFax{
+	
+	private static final Logger log = Logger.getLogger(WebServiceFaxImp.class.getName());
+	
+	@EJB
+	AccessForDBPinCodeBeanLocal pinCodeDB = null;
+	
+	@Override
+	public String convertFile(String filePath) {
+		String workFileDir = ReadConfigFile.getCfgReadFile().getProperty("workdir") + File.separator;
+		String workScriptDir = ReadConfigFile.getCfgReadFile().getProperty("script_workdir") + File.separator;
+		String command = workScriptDir + "faxconvert.sh " + workFileDir + filePath;
+		log.info(filePath + " trying convert ...");
+		ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
+		int shellExitStatus = 0;
+		String response = "0";
+		try {
+			Process shell = pb.start();
+			// To capture output from the shell
+			InputStream shellIn = shell.getInputStream();
+			// Wait for the shell to finish and get the return code
+			shellExitStatus = shell.waitFor();
+			System.out.println("Exit status" + shellExitStatus);
+			response = convertStreamToStr(shellIn);
+			 
+			shellIn.close();
+
+
+		} catch (IOException e) {
+			log.error("Error occured while executing Linux command. Error Description: ");
+		    System.out.println(e.getMessage());
+			}
+			catch (InterruptedException e) {
+				log.error("Error occured while executing Linux command. Error Description: ");
+			System.out.println(e.getMessage());
+			}
+
+		
+
+		if(shellExitStatus != 0){ 
+			log.info(filePath + " convert fail.");
+			return Constants.CONVERT_FAIL;
+		}
+		if (new Integer(response.trim()) > Constants.COUNT_PAGES){
+			log.info(filePath + " very many pages.");
+			return Constants.MANY_PAGES;
+		}
+		log.info(filePath + " convert success.");
+		return Constants.CONVERT_OK;
+	}
+	
+	@Override
+	public String deleteFile(String filePath) {
+		String originalFilePath = filePath.substring(0, filePath.length() - 4);
+		String workFileDir = ReadConfigFile.getCfgReadFile().getProperty("workdir") + File.separator;
+		log.info(filePath + " trying delete ...");
+		String[] cmd = {"/bin/bash","-c","rm -f "  + workFileDir + originalFilePath + "*"};
+		if ( Constants.commandExec(cmd) == 0){
+			log.info(filePath + " delete success.");
+			return Constants.DELETE_SUCCESS;
+		}
+		log.info(filePath + " delete fail.");
+		return Constants.DELETE_FAIL;
+	}
+	
+	@Override
+	public String openSession(String userName) {
+		SipManagement sipManagement = new SipManagement();
+		String pinCode = pinCodeDB.getPinCode(userName);
+		String pinCodePassword = pinCodeDB.getPinCodePassword(userName);
+		sipManagement.createSipConfig(userName, pinCode, pinCodePassword);
+		boolean register =  sipManagement.sipReload(pinCode, userName);
+		log.info(userName + " trying open new session ...");
+		if (register){
+			log.info(userName + " open new session .");
+			return "OK";
+		}
+		log.info(userName + " NOT open new session .");
+		return "FAIL";
+	}
+	
+	@Override
+	public String sendFax(String userName, String destinationNumber, String fileName) {
+		
+		String pinCode = pinCodeDB.getPinCode(userName);
+		AsteriskManagement asterisk = null;
+		log.info(userName + " trying send fax "+ fileName +" to " + destinationNumber);
+		try {
+			asterisk = new AsteriskManagement(destinationNumber, fileName, pinCode);
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		if (asterisk != null) return asterisk.run();
+		return Constants.FAX_NOT_SEND;
+	}
+	
+	@Override
+	public String resultSendFax(String userName, String destinationNumber, String fileName) {
+		String resultFax = AsteriskListenerEvent.getStatusPhone().get(destinationNumber);
+		while(resultFax.equals(Constants.CALL_SUCCESS)){
+			try {
+				Thread.sleep(500);
+				resultFax = AsteriskListenerEvent.getStatusPhone().get(destinationNumber);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		if (resultFax.equals(Constants.FAX_NOT_SEND)
+				|| resultFax.equals(Constants.FAX_OK)) {
+			if (fileName.indexOf("history/") == -1) {
+				String fileTIF = fileName.substring(userName.length() + 1,
+						fileName.length());
+				String workDir = ReadConfigFile.getCfgReadFile().getProperty(
+						"workdir") + File.separator;
+				String originalFilePath = fileName.substring(0, fileName.length() - 4);
+				Constants.commandExec("mv " + workDir + userName + File.separator + 
+							originalFilePath + "*" + " "  + workDir + userName + File.separator);
+			}
+		}
+		return resultFax;
+	}
+	
+	@Override
+	public String closeSession(String userName) {
+		String pinCode = pinCodeDB.getPinCode(userName);
+		SipManagement sipManagement = new SipManagement();
+		sipManagement.deleteSipConfig(userName);
+		sipManagement.sipReload(pinCode, userName);
+		log.info(userName + " close session .");
+	    return "OK";
+	}
+	
+	@Override
+	public String moveFile(String username, String fileName) {
+		String workDir = ReadConfigFile.getCfgReadFile().getProperty("workdir") + File.separator ;  
+		Constants.commandExec("rm -Rf " + workDir + username + File.separator + "*");
+		String oldFilePath = workDir + username + File.separator + "history" + File.separator;
+		String newFilePath = workDir + username + File.separator ;
+		String originalFilePath = fileName.substring(0, fileName.length() - 4); 
+		Constants.commandExec("mv " + oldFilePath + originalFilePath + "*" + " " + newFilePath );
+		log.info("Fax send from history " + fileName);
+		return "OK";
+	}
+	
+	private String convertStreamToStr(InputStream is) throws IOException {
+		if (is != null) {
+			Writer writer = new StringWriter();
+			char[] buffer = new char[1024];
+			try {
+				Reader reader = new BufferedReader(new InputStreamReader(is,
+						"UTF-8"));
+				int n;
+				while ((n = reader.read(buffer)) != -1) {
+					writer.write(buffer, 0, n);
+				}
+			} finally {
+				is.close();
+			}
+			return writer.toString();
+		} else {
+			return "";
+		}
+	}
+
+}
+
+
